@@ -1662,11 +1662,20 @@ opus_int32 opus_encode_native(OpusEncoder *st, const opus_val16 *pcm, int frame_
     if (st->mode != MODE_CELT_ONLY)
     {
         opus_int32 total_bitRate, celt_rate;
+        opus_int activity;
 #ifdef FIXED_POINT
        const opus_int16 *pcm_silk;
 #else
        VARDECL(opus_int16, pcm_silk);
        ALLOC(pcm_silk, st->channels*frame_size, opus_int16);
+#endif
+
+        activity = VAD_NO_DECISION;
+#ifndef DISABLE_FLOAT_API
+        if( analysis_info.valid ) {
+            /* Inform SILK about the Opus VAD decision */
+            activity = ( analysis_info.activity_probability >= DTX_ACTIVITY_THRESHOLD );
+        }
 #endif
 
         /* Distribute bits between SILK and CELT */
@@ -1816,7 +1825,7 @@ opus_int32 opus_encode_native(OpusEncoder *st, const opus_val16 *pcm, int frame_
             for (i=0;i<st->encoder_buffer*st->channels;i++)
                 pcm_silk[i] = FLOAT2INT16(st->delay_buffer[i]);
 #endif
-            silk_Encode( silk_enc, &st->silk_mode, pcm_silk, st->encoder_buffer, NULL, &zero, 1 );
+            silk_Encode( silk_enc, &st->silk_mode, pcm_silk, st->encoder_buffer, NULL, &zero, 1, activity );
         }
 
 #ifdef FIXED_POINT
@@ -1825,7 +1834,7 @@ opus_int32 opus_encode_native(OpusEncoder *st, const opus_val16 *pcm, int frame_
         for (i=0;i<frame_size*st->channels;i++)
             pcm_silk[i] = FLOAT2INT16(pcm_buf[total_buffer*st->channels + i]);
 #endif
-        ret = silk_Encode( silk_enc, &st->silk_mode, pcm_silk, frame_size, &enc, &nBytes, 0 );
+        ret = silk_Encode( silk_enc, &st->silk_mode, pcm_silk, frame_size, &enc, &nBytes, 0, activity );
         if( ret ) {
             /*fprintf (stderr, "SILK encode error: %d\n", ret);*/
             /* Handle error */
@@ -2129,6 +2138,12 @@ opus_int32 opus_encode_native(OpusEncoder *st, const opus_val16 *pcm, int frame_
 #ifndef DISABLE_FLOAT_API
     if (st->use_dtx && (analysis_info.valid || is_silence))
     {
+       /* Mark the frame active if Silk considers it active */
+       if(st->mode != MODE_CELT_ONLY && st->silk_mode.signalType != TYPE_NO_VOICE_ACTIVITY)
+       {
+          analysis_info.activity_probability = 1.0f;
+       }
+
        if (decide_dtx_mode(analysis_info.activity_probability, &st->nb_no_activity_frames,
              st->peak_signal_energy, pcm, frame_size, st->channels, is_silence, st->arch))
        {
