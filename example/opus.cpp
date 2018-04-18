@@ -355,7 +355,7 @@ void wav2opus(char *in_file, char *out_file) {
 }
 
 int main(int argc, char *argv[]) {
-    printf("Audio Noise Reduction\n");
+    printf("Opus Demo\n");
     printf("blog:http://tntmonks.cnblogs.com/\n");
     printf("e-mail:gaozhihan@vip.qq.com\n");
     if (argc < 2)
